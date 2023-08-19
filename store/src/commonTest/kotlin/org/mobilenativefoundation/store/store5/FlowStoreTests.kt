@@ -855,6 +855,45 @@ class FlowStoreTests {
             fetcher1Job.cancelAndJoin()
         }
 
+    @Test
+    fun givenSourceOfTruthWhenStreamCachedDataWithRefreshThenReaderIsOnlyCalledOnce() = testScope.runTest {
+        val persister = InMemoryPersister<Int, String>().asFlowable()
+        val pipeline = StoreBuilder.from(
+            Fetcher.ofFlow {
+                flow {
+                    delay(20)
+                    emit("three-1")
+                }
+            },
+            sourceOfTruth = persister.asSourceOfTruth()
+        )
+            .disableCache()
+            .buildWithTestScope()
+
+        launch {
+            delay(10)
+            persister.flowWriter(3, "local-1")
+        }
+        assertEmitsExactly(
+            pipeline.stream(StoreReadRequest.cached(3, refresh = true)),
+            listOf(
+                Loading(
+                    origin = StoreReadResponseOrigin.Fetcher()
+                ),
+                Data(
+                    value = "local-1",
+                    origin = StoreReadResponseOrigin.SourceOfTruth
+                ),
+                Data(
+                    value = "three-1",
+                    origin = StoreReadResponseOrigin.Fetcher()
+                )
+
+            )
+        )
+        assertEquals(1, persister.readCount)
+    }
+
     suspend fun Store<Int, Int>.get(request: StoreReadRequest<Int>) =
         this.stream(request).filter { it.dataOrNull() != null }.first()
 

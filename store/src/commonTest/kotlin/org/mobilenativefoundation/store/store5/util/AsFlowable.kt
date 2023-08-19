@@ -17,6 +17,8 @@ class SimplePersisterAsFlowable<Key : Any, Output : Any>(
     private val writer: suspend (Key, Output) -> Unit,
     private val delete: (suspend (Key) -> Unit)? = null
 ) {
+    var readCount = 0
+        private set
 
     val supportsDelete: Boolean
         get() = delete != null
@@ -24,6 +26,7 @@ class SimplePersisterAsFlowable<Key : Any, Output : Any>(
     private val versionTracker = KeyTracker<Key>()
 
     fun flowReader(key: Key): Flow<Output?> = flow {
+        readCount++
         versionTracker.keyFlow(key).collect {
             emit(reader(key))
         }
